@@ -7,42 +7,26 @@
 
 namespace Drupal\ip_consumer_auth\Authentication\Provider;
 
-use \Drupal\Component\Utility\String;
 use Drupal\Core\Authentication\AuthenticationProviderInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\Core\Flood\FloodInterface;
-use Drupal\user\UserAuthInterface;
+use Drupal\user\Entity\User;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\GetResponseForExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 /**
- * HTTP Basic authentication provider.
+ * IP consumer authentication provider.
  */
 class IPConsumerAuth implements AuthenticationProviderInterface {
 
   /**
-   * The config factory.
+   * A configuration object.
    *
-   * @var \Drupal\Core\Config\ConfigFactoryInterface
+   * @var \Drupal\Core\Config\ImmutableConfig
    */
-  protected $configFactory;
-
-  /**
-   * The user auth service.
-   *
-   * @var \Drupal\user\UserAuthInterface
-   */
-  protected $userAuth;
-
-  /**
-   * The flood service.
-   *
-   * @var \Drupal\Core\Flood\FloodInterface
-   */
-  protected $flood;
+  protected $config;
 
   /**
    * The entity type manager.
@@ -52,19 +36,15 @@ class IPConsumerAuth implements AuthenticationProviderInterface {
   protected $entityTypeManager;
 
   /**
-   * Constructs a HTTP basic authentication provider object.
+   * Constructs an IP consumer authentication provider object.
    *
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
-   * @param \Drupal\user\UserAuthInterface $user_auth
-   *   The user authentication service.
-   * @param \Drupal\Core\Flood\FloodInterface $flood
-   *   The flood service.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity manager service.
    */
   public function __construct(ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager) {
-    $this->configFactory = $config_factory;
+    $this->config = $config_factory->get('ip_consumer_auth.settings');
     $this->entityTypeManager = $entity_type_manager;
   }
 
@@ -72,47 +52,44 @@ class IPConsumerAuth implements AuthenticationProviderInterface {
    * {@inheritdoc}
    */
   public function applies(Request $request) {
-    // Only apply this validation if request has a valid accept value
-    $config = $this->configFactory->get('ip_consumer_auth.consumers_form_config');
-    if(strstr($request->headers->get('Accept'),$config->get('format'))) {
-      return TRUE;
+    // Only apply this validation if request has a valid accept value.
+    $formats = $this->config->get('format');
+    foreach ($formats as $format) {
+      if (strstr($request->headers->get('Accept'), $format)) {
+        return TRUE;
+      }
     }
-    else {
-      return FALSE;
-    }
+    return FALSE;
   }
 
   /**
    * {@inheritdoc}
    */
   public function authenticate(Request $request) {
-    $config = $this->configFactory->get('ip_consumer_auth.consumers_form_config');
-    $ip_consumers = $config->get('ip_consumers');
-    // Determine if list of IP is a white list or black list
-    $type = $config->get('list_type');
-    $ips = array_map('trim', explode( "\n", $ip_consumers));
+    $ip_consumers = $this->config->get('ip_consumers');
+    // Determine if list of IP is a white list or black list.
+    $type = $this->config->get('list_type');
+    $ips = array_map('trim', explode("\n", $ip_consumers));
     $consumer_ip = $request->getClientIp(TRUE);
 
-    // White list logic
-    if($type) {
+    // White list logic.
+    if ($type) {
       if (in_array($consumer_ip, $ips)) {
-        // Return Anonymous user
-        return $this->entityTypeManager->getStorage('user')->load(0);
+        // Return Anonymous user.
+        return User::getAnonymousUser();
       }
-      else{
+      else {
         throw new AccessDeniedHttpException();
-        return null;
       }
     }
-    // Black list logic
+    // Black list logic.
     else {
       if (!in_array($consumer_ip, $ips)) {
-        // Return Anonymous user
-        return $this->entityTypeManager->getStorage('user')->load(0);
+        // Return Anonymous user.
+        return User::getAnonymousUser();
       }
-      else{
+      else {
         throw new AccessDeniedHttpException();
-        return null;
       }
     }
   }

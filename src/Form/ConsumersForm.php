@@ -9,79 +9,84 @@ namespace Drupal\ip_consumer_auth\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
-use Symfony\Component\DependencyInjection\Exception\ParameterNotFoundException;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
-class ConsumersForm extends ConfigFormBase
-{
+/**
+ * Form builder for the IP consumer authentication settings page.
+ */
+class ConsumersForm extends ConfigFormBase {
+
+  /**
+   * The available serializer formats.
+   *
+   * @var array
+   */
+  protected $formats;
+
+  /**
+   * Constructs a new ConsumersForm.
+   *
+   * @param array $formats
+   *   The available serializer formats.
+   */
+  public function __construct(array $formats) {
+    $this->formats = array_combine($formats, $formats);
+  }
 
   /**
    * {@inheritdoc}
    */
-  public function getFormID() {
-    return 'consumers_form';
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->getParameter('serializer.formats')
+    );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getFormId() {
+    return 'ip_consumer_auth_settings_form';
   }
   /**
    * {@inheritdoc}
    */
-  public function  getEditableConfigNames() {
+  protected function getEditableConfigNames() {
+    return ['ip_consumer_auth.settings'];
   }
 
   /**
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    $config = \Drupal::configFactory()->get('ip_consumer_auth.consumers_form_config');
+    $config = $this->config('ip_consumer_auth.settings');
 
     $form['ip_consumers'] = [
       '#type' => 'textarea',
-      '#title' => $this->t('IP Consumers'),
-      '#description' => $this->t('Place IP addresses on separate lines'),
+      '#title' => $this->t('IPs to whitelist / blacklist'),
+      '#description' => $this->t('Specify the IP addresses to whitelist / blacklist. Place each IP address on a separate line.'),
       '#default_value' => $config->get('ip_consumers'),
     ];
 
-    $options = array(0 => t('Black list'), 1 => t('White list'));
+    $options = array(0 => t('Blacklist'), 1 => t('Whitelist'));
     $form['list_type'] = array(
       '#type' => 'radios',
       '#title' => t('Type of IP list'),
       '#default_value' => $config->get('list_type'),
       '#options' => $options,
-      '#description' => t('Define in what way the IP list will be used in Authorization logic.'),
-      '#required' => TRUE
+      '#description' => t('Define the behaviour to use when applying the IP list as authentication method for REST resources. A whitelist will only allow access to the specified IPs. A blacklist will allow access to the all IPs, except the specified ones.'),
+      '#required' => TRUE,
     );
 
-    $serializedFormats = $this->getSerializerFormats();
     $form['format'] = [
-      '#type' => 'select',
+      '#type' => 'checkboxes',
       '#title' => $this->t('Format'),
-      '#description' => $this->t("Select a format filter to determine if Authetincation provider applies i.e 'json'"),
+      '#description' => $this->t("Select the acceptable formats to apply authentication to."),
       '#default_value' => $config->get('format'),
-      '#options' => $serializedFormats,
+      '#options' => $this->formats,
     ];
 
     return parent::buildForm($form, $form_state);
-  }
-
-  protected function getSerializerFormats()
-  {
-    try {
-      $serializedFormats = \Drupal::getContainer()->getParameter('serializer.formats');
-      return array_combine($serializedFormats, $serializedFormats);
-    } catch (ParameterNotFoundException $e) {
-      drupal_set_message(
-          sprintf(
-            '%s %s',
-            $e->getMessage(),
-            $this->t('Please, install module "RESTful Web Services"')
-          ),
-          'error');
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function validateForm(array &$form, FormStateInterface $form_state) {
-    return parent::validateForm($form, $form_state);
   }
 
   /**
@@ -90,10 +95,11 @@ class ConsumersForm extends ConfigFormBase
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
-    $config = \Drupal::configFactory()->getEditable('ip_consumer_auth.consumers_form_config');
-    $config->set('ip_consumers', $form_state->getValue('ip_consumers'));
-    $config->set('list_type', $form_state->getValue('list_type'));
-    $config->set('format', $form_state->getValue('format'));
-    $config->save();
+    $this->config('ip_consumer_auth.settings')
+      ->set('ip_consumers', $form_state->getValue('ip_consumers'))
+      ->set('list_type', $form_state->getValue('list_type'))
+      ->set('format', array_filter($form_state->getValue('format')))
+      ->save();
   }
+
 }
