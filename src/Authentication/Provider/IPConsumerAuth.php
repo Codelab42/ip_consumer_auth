@@ -52,10 +52,10 @@ class IPConsumerAuth implements AuthenticationProviderInterface {
    * {@inheritdoc}
    */
   public function applies(Request $request) {
-    // Only apply this validation if request has a valid accept value.
+    // Only apply this validation if request has a valid Content-Type value.
     $formats = $this->config->get('format');
     foreach ($formats as $format) {
-      if (strstr($request->headers->get('Accept'), $format)) {
+      if (strstr($request->headers->get('Content-Type'), $format)) {
         return TRUE;
       }
     }
